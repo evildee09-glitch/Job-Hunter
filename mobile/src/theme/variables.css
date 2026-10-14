@@ -1,0 +1,5 @@
+:root {
+  --ajh-warn: #c62828;
+}
+ion-card { margin-inline: 12px; }
+.score-badge { font-weight: 700; }
