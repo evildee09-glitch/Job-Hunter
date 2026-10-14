@@ -19,7 +19,7 @@ jobs:
         node-version: 20
 
     - name: Set up JDK 17
-      uses: actions/setup-java@v4
+      uses: actions/setup-java@v5
       with:
         distribution: 'temurin'
         java-version: '17'
@@ -28,9 +28,10 @@ jobs:
       working-directory: ./mobile
       run: |
         npm install
+        npm install @capacitor/android
         npx vite build
 
-    - name: Ensure Capacitor Android Platform Exists
+    - name: Initialize & Sync Capacitor Android
       working-directory: ./mobile
       run: |
         if [ ! -d "android" ]; then
