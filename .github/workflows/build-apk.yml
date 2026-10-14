@@ -19,7 +19,7 @@ jobs:
         node-version: 20
 
     - name: Set up JDK 17
-      uses: actions/setup-java@v5
+      uses: actions/setup-java@v4
       with:
         distribution: 'temurin'
         java-version: '17'
@@ -30,10 +30,12 @@ jobs:
         npm install
         npx vite build
 
-    - name: Sync Capacitor Android
+    - name: Ensure Capacitor Android Platform Exists
       working-directory: ./mobile
       run: |
-        npx cap add android || true
+        if [ ! -d "android" ]; then
+          npx cap add android
+        fi
         npx cap sync android
 
     - name: Build Debug APK with Gradle
