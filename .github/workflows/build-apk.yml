@@ -24,30 +24,30 @@ jobs:
         distribution: 'temurin'
         java-version: '17'
 
-    - name: Install Dependencies & Build Web App
+    - name: Install Dependencies
       working-directory: ./mobile
       run: |
         npm install
         npm install @capacitor/core @capacitor/cli @capacitor/android
-        npx vite build
+        chmod -R +x node_modules/.bin
+
+    - name: Build Web App
+      working-directory: ./mobile
+      run: |
+        ./node_modules/.bin/vite build
 
     - name: Initialize & Sync Capacitor Android
       working-directory: ./mobile
       run: |
         if [ ! -d "android" ]; then
-          npx cap add android
+          ./node_modules/.bin/cap add android
         fi
-        npx cap sync android
-
-    - name: Check & Grant Executable Permission to Gradlew
-      working-directory: ./mobile/android
-      run: |
-        ls -la
-        chmod +x gradlew
+        ./node_modules/.bin/cap sync android
 
     - name: Build Debug APK with Gradle
       working-directory: ./mobile/android
       run: |
+        chmod +x gradlew
         ./gradlew assembleDebug
 
     - name: Upload APK Artifact
