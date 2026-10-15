@@ -1,0 +1,31 @@
+﻿# Dependencies
+node_modules/
+**/node_modules/
+
+# Build outputs and test artifacts
+dist/
+build/
+coverage/
+.vite/
+**/.vite/
+
+# Environment variables and secrets
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+npm-debug.log*
+
+# Android generated files
+**/.gradle/
+**/local.properties
+
+# Archives
+*.rar
+*.zip
+
+# Operating system files
+.DS_Store
+Thumbs.db

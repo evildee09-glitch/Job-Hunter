@@ -1,10 +1,11 @@
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
-import { jobsRepo } from '../data/mockRepos';
+import { jobsRepo } from '../data/jobsRepo';
+import type { JobSource } from '../domain/types';
 
-export function useJobs(query: string) {
+export function useJobs(query: string, source: JobSource, philippinesOnly: boolean) {
   return useInfiniteQuery({
-    queryKey: ['jobs', query],
-    queryFn: ({ pageParam }) => jobsRepo.list({ query, cursor: pageParam }),
+    queryKey: ['jobs', source, philippinesOnly, query],
+    queryFn: ({ pageParam }) => jobsRepo.list({ query, cursor: pageParam, source, philippinesOnly }),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (last) => last.nextCursor ?? undefined,
   });
