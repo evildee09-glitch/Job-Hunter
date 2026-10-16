@@ -6,10 +6,10 @@ import VerificationBadge from './VerificationBadge';
 import ItemEditor, { type EditorState } from './ItemEditor';
 import { ErrorRetry, SkeletonList } from './StateViews';
 
-type Kind = 'employment' | 'skills' | 'education' | 'certifications' | 'projects';
+export type Kind = 'employment' | 'skills' | 'education' | 'certifications' | 'projects';
 const S = (v: unknown) => (v === undefined || v === null ? '' : String(v));
 
-const SECTIONS: Array<{ kind: Kind; label: string; fields: string[]; title: (i: Item) => string; sub: (i: Item) => string }> = [
+export const SECTIONS: Array<{ kind: Kind; label: string; fields: string[]; title: (i: Item) => string; sub: (i: Item) => string }> = [
   { kind: 'employment', label: 'Employment', fields: ['title', 'company', 'start', 'end', 'description'],
     title: (i) => `${S(i.title) || '(no title)'}${i.company ? ` · ${S(i.company)}` : ''}`, sub: (i) => [S(i.start), S(i.end)].filter(Boolean).join(' to ') },
   { kind: 'skills', label: 'Skills', fields: ['name', 'level'], title: (i) => S(i.name), sub: (i) => S(i.level) },

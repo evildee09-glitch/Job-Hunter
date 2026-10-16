@@ -1,121 +1,73 @@
 import { useState } from 'react';
-import {
-  IonAlert, IonBadge, IonButton, IonCard, IonCardContent, IonItem, IonLabel, IonList, IonProgressBar, IonToggle,
-} from '@ionic/react';
+import { IonAlert, IonButton, IonCard, IonCardContent } from '@ionic/react';
 import PageShell from '../../components/PageShell';
-import { tasks } from '../../domain/providers';
+import NeedsBackend from '../../components/NeedsBackend';
+import StageNotice from '../../components/StageNotice';
+import { apiFetch, getBackend } from '../../data/api';
+import { useProfile } from '../../hooks/useProfile';
 
 const B = '/settings';
 
-export function ProviderHealth() {
-  const rows = [
-    ['Ollama (local)', 'Healthy', '1.8 s', 'today 09:12'],
-    ['OpenAI', 'Disabled', '-', '-'],
-    ['Google Gemini', 'Disabled', '-', '-'],
-    ['Anthropic Claude', 'Disabled', '-', '-'],
-  ];
-  return (
-    <PageShell title="Provider Health" backHref={B}>
-      <IonList inset>
-        {rows.map(([n, s, l, t]) => (
-          <IonItem key={n}>
-            <IonLabel><h3>{n}</h3><p>Latency {l} · last success {t}</p></IonLabel>
-            <IonBadge color={s === 'Healthy' ? 'success' : 'medium'}>{s}</IonBadge>
-          </IonItem>
-        ))}
-      </IonList>
-      <p className="ion-padding">Mock data. Real checks arrive in Stage 11.</p>
-    </PageShell>
-  );
-}
-
-export function UsageCost() {
-  return (
-    <PageShell title="Usage and Cost" backHref={B}>
-      <IonCard>
-        <IonCardContent>
-          <strong>Monthly cloud budget (mock)</strong>
-          <IonProgressBar value={0.35} />
-          <p>35% used. You are warned before the limit is reached.</p>
-        </IonCardContent>
-      </IonCard>
-      <IonList inset>
-        <IonItem><IonLabel><h3>Ollama / llama3.1:8b</h3><p>42 requests · local, no API cost · avg speed shown when reported</p></IonLabel></IonItem>
-        <IonItem><IonLabel><h3>Cloud models</h3><p>No cloud requests yet. Costs are estimates and labeled as such.</p></IonLabel></IonItem>
-      </IonList>
-    </PageShell>
-  );
-}
-
-export function SearchSchedules() {
-  const [on, setOn] = useState([true, false]);
-  const rows = ['Every morning, 8:00 · Backend roles', 'Weekdays, twice daily · Mobile roles'];
-  return (
-    <PageShell title="Search Schedules" backHref={B}>
-      <IonList inset>
-        {rows.map((r, i) => (
-          <IonItem key={r}>
-            <IonToggle checked={on[i]} onIonChange={(e) => setOn((p) => p.map((v, k) => (k === i ? e.detail.checked : v)))}>{r}</IonToggle>
-          </IonItem>
-        ))}
-      </IonList>
-      <p className="ion-padding">Mock only. Scheduled runs need the backend (Stage 10).</p>
-    </PageShell>
-  );
-}
-
-export function Notifications() {
-  const rows = ['High-match job: Senior Backend Engineer (9/10)', 'Follow-up due: Helix Cloud', 'Interview in 3 days: Orbit Retail'];
-  return (
-    <PageShell title="Notifications" backHref={B}>
-      <IonList>{rows.map((r) => <IonItem key={r}><IonLabel className="ion-text-wrap">{r}</IonLabel></IonItem>)}</IonList>
-    </PageShell>
-  );
-}
+export const ProviderHealth = () => <StageNotice title="Provider Health" backHref={B} text="No providers to check yet. Health monitoring arrives in Stage 11." />;
+export const UsageCost = () => <StageNotice title="Usage and Cost" backHref={B} text="No AI usage recorded. Usage and cost tracking arrive in Stage 11." />;
+export const SearchSchedules = () => <StageNotice title="Search Schedules" backHref={B} text="Scheduled searches need background tasks on the backend (Stage 10). For now, searches run when you open Find Jobs." />;
+export const Notifications = () => <StageNotice title="Notifications" backHref={B} text="No notifications yet. In-app notifications arrive in Stage 10." />;
+export const SystemLogs = () => <StageNotice title="System Logs" backHref={B} text="Backend logs are in your Render dashboard. In-app logs arrive later. Secrets and full prompts are never logged." />;
 
 export function Profile() {
+  const q = useProfile();
+  const p = q.data;
   return (
     <PageShell title="Profile" backHref={B}>
-      <IonCard><IonCardContent>
-        <p>Name: Sample Candidate</p>
-        <p>Preferences: remote or hybrid · notice period and salary range not set</p>
-        <p style={{ opacity: 0.7 }}>Sample data. Editable fields arrive with the master resume database in Stage 2.</p>
-      </IonCardContent></IonCard>
+      {!getBackend() && <NeedsBackend />}
+      {p && (
+        <IonCard><IonCardContent>
+          <p>{p.name || '(no name)'} · {p.email || 'no email'} · {p.phone || 'no phone'}</p>
+          <IonButton routerLink="/resume/import">Edit in Import and Review</IonButton>
+        </IonCardContent></IonCard>
+      )}
     </PageShell>
   );
 }
 
 export function Privacy() {
-  const [local, setLocal] = useState<Record<string, boolean>>(Object.fromEntries(tasks.map((t) => [t, true])));
-  const [alert, setAlert] = useState<'export' | 'delete' | null>(null);
+  const [alert, setAlert] = useState(false);
+  const [msg, setMsg] = useState('');
+  const exportData = async () => {
+    setMsg('');
+    try {
+      const data = await apiFetch<unknown>('/export');
+      const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }));
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'ai-job-hunter-export.json';
+      a.click();
+      URL.revokeObjectURL(url);
+      setMsg('Export created. On some Android versions downloads from the app may be blocked; tell me if so.');
+    } catch (e) { setMsg(e instanceof Error ? e.message : 'Export failed'); }
+  };
+  const deleteAll = async () => {
+    try {
+      const r = await apiFetch<{ deleted_applications: number; deleted_files: number }>('/data?confirm=DELETE', { method: 'DELETE' });
+      setMsg(`Deleted your profile, ${r.deleted_applications} tracked applications and ${r.deleted_files} uploaded files from the backend.`);
+    } catch (e) { setMsg(e instanceof Error ? e.message : 'Delete failed'); }
+  };
   return (
     <PageShell title="Privacy and Data" backHref={B}>
-      <IonList inset>
-        {tasks.map((t) => (
-          <IonItem key={t}>
-            <IonToggle checked={local[t]} onIonChange={(e) => setLocal((p) => ({ ...p, [t]: e.detail.checked }))}>
-              {t}: local only
-            </IonToggle>
-          </IonItem>
-        ))}
-      </IonList>
-      <div className="ion-padding">
-        <IonButton expand="block" fill="outline" onClick={() => setAlert('export')}>Export my data</IonButton>
-        <IonButton expand="block" color="danger" onClick={() => setAlert('delete')}>Delete all my data</IonButton>
-      </div>
-      <IonAlert isOpen={alert !== null} header={alert === 'delete' ? 'Delete all data?' : 'Export data'}
-        message={alert === 'delete' ? 'This cannot be undone. (Mock: nothing is deleted in Stage 1.)' : 'Mock: export arrives with the backend.'}
-        buttons={['OK']} onDidDismiss={() => setAlert(null)} />
-    </PageShell>
-  );
-}
-
-export function SystemLogs() {
-  const rows = ['09:12 provider.ollama health check ok', '09:10 search.run manual started', '09:10 search.run finished (0 new)'];
-  return (
-    <PageShell title="System Logs" backHref={B}>
-      <IonList>{rows.map((r) => <IonItem key={r}><IonLabel className="ion-text-wrap"><code>{r}</code></IonLabel></IonItem>)}</IonList>
-      <p className="ion-padding">Secrets, tokens, and full prompts are never written to logs.</p>
+      {!getBackend() && <NeedsBackend />}
+      {getBackend() && (
+        <IonCard><IonCardContent>
+          <p>Your resume, profile, and tracked applications are stored in your backend's database. Job sources are contacted directly from this device; your resume is never sent to them.</p>
+          <IonButton expand="block" fill="outline" onClick={exportData}>Export my data (JSON)</IonButton>
+          <IonButton expand="block" color="danger" onClick={() => setAlert(true)}>Delete all backend data</IonButton>
+          {msg && <p>{msg}</p>}
+          <p style={{ opacity: 0.7 }}>Saved jobs and caches stay on this device; clear the app's storage to remove them.</p>
+        </IonCardContent></IonCard>
+      )}
+      <IonAlert isOpen={alert} header="Delete all backend data?" message="This permanently deletes your profile, imported resumes, and tracked applications. Type DELETE to confirm."
+        inputs={[{ name: 'confirm', type: 'text', placeholder: 'DELETE' }]}
+        buttons={[{ text: 'Cancel', role: 'cancel' }, { text: 'Delete', role: 'destructive', handler: (d: { confirm?: string }) => { if (d.confirm !== 'DELETE') return false; deleteAll(); } }]}
+        onDidDismiss={() => setAlert(false)} />
     </PageShell>
   );
 }
@@ -124,9 +76,10 @@ export function Help() {
   return (
     <PageShell title="Help" backHref={B}>
       <IonCard><IonCardContent>
-        <p><strong>You always submit.</strong> The app prepares applications, but you click the final Submit yourself.</p>
-        <p><strong>Verified facts only.</strong> Resumes and letters use only details you confirmed.</p>
-        <p><strong>Local vs cloud.</strong> Each task shows where it runs; local-only is available.</p>
+        <p><strong>You always apply.</strong> The app finds and ranks jobs and tracks your applications. You click Submit yourself on the employer's site, and you mark an application as submitted yourself.</p>
+        <p><strong>Verified facts only.</strong> Matching and tailoring use only entries you confirmed.</p>
+        <p><strong>Matching is keyword-based</strong> until AI analysis arrives. Always read the listing and check eligibility.</p>
+        <p><strong>Sources.</strong> Remotive, Himalayas, and We Work Remotely via their public feeds. Other boards do not offer open APIs.</p>
       </IonCardContent></IonCard>
     </PageShell>
   );

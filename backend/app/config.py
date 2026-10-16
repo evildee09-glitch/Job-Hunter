@@ -8,6 +8,9 @@ DATA_DIR.mkdir(parents=True, exist_ok=True)
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 DATABASE_URL = os.environ.get("DATABASE_URL", f"sqlite:///{(DATA_DIR / 'app.db').as_posix()}")
+for _old in ("postgres://", "postgresql://"):
+    if DATABASE_URL.startswith(_old):
+        DATABASE_URL = "postgresql+psycopg://" + DATABASE_URL[len(_old):]
 API_TOKEN = os.environ.get("API_TOKEN", "")
 CORS_ORIGINS = [
     o.strip()

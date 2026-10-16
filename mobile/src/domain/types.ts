@@ -1,6 +1,6 @@
 export type WorkArrangement = 'remote' | 'hybrid' | 'onsite';
 export type ListingStatus = 'active' | 'expired';
-export type JobSource = 'remotive' | 'himalayas';
+export type JobSource = 'remotive' | 'himalayas' | 'wwr';
 
 export interface Job {
   id: string;

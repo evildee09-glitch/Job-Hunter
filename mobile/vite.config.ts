@@ -11,6 +11,11 @@ export default defineConfig({
         changeOrigin: true,
         rewrite: (p) => p.replace(/^\/api\/remotive/, '/api/remote-jobs'),
       },
+      '/api/wwr': {
+        target: 'https://weworkremotely.com',
+        changeOrigin: true,
+        rewrite: (p) => p.replace(/^\/api\/wwr/, '/remote-jobs.rss'),
+      },
       '/api/himalayas': {
         target: 'https://himalayas.app',
         changeOrigin: true,

@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -89,3 +89,35 @@ class Document(Base):
     sha256: Mapped[str] = mapped_column(String(64), index=True)
     extracted_text: Mapped[str] = mapped_column(Text, default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class Application(Base):
+    """A job the user is tracking. Status changes are always made by the user, never automatically."""
+
+    __tablename__ = "applications"
+    __table_args__ = (UniqueConstraint("profile_id", "url", name="uq_application_profile_url"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    profile_id: Mapped[int] = mapped_column(ForeignKey("profiles.id", ondelete="CASCADE"), index=True)
+    source: Mapped[str] = mapped_column(String(24), default="")
+    job_ref: Mapped[str] = mapped_column(String(120), default="")
+    title: Mapped[str] = mapped_column(String(300))
+    company: Mapped[str] = mapped_column(String(200), default="")
+    url: Mapped[str] = mapped_column(String(500))
+    location: Mapped[str] = mapped_column(String(200), default="")
+    status: Mapped[str] = mapped_column(String(24), default="shortlisted", index=True)
+    match_score: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    notes: Mapped[str] = mapped_column(Text, default="")
+    applied_on: Mapped[str] = mapped_column(String(10), default="")
+    follow_up_on: Mapped[str] = mapped_column(String(10), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+    interviews: Mapped[list["Interview"]] = relationship(cascade="all, delete-orphan", order_by="Interview.at")
+
+
+class Interview(Base):
+    __tablename__ = "interviews"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    application_id: Mapped[int] = mapped_column(ForeignKey("applications.id", ondelete="CASCADE"), index=True)
+    at: Mapped[str] = mapped_column(String(32))
+    kind: Mapped[str] = mapped_column(String(80), default="")
+    notes: Mapped[str] = mapped_column(Text, default="")

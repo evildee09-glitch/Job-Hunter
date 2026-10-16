@@ -1,20 +1,25 @@
 import { useState } from 'react';
 import { IonButton, IonCard, IonCardContent, IonChip, IonLabel, IonSelect, IonSelectOption } from '@ionic/react';
 import PageShell from '../../components/PageShell';
+import NeedsBackend from '../../components/NeedsBackend';
+import { getBackend } from '../../data/api';
 import { useJobFlags } from '../../data/jobFlags';
-import { mockSkills } from '../../mock/resume';
-import { splitSkills } from '../../domain/resume';
+import { useProfile } from '../../hooks/useProfile';
+import { splitSkills, type Skill } from '../../domain/resume';
 
 export default function ResumeTailoring() {
   const flags = useJobFlags();
-  const [jobId, setJobId] = useState<string>('');
+  const q = useProfile();
+  const [jobId, setJobId] = useState('');
   const [ran, setRan] = useState(false);
   const jobs = [...new Map([...flags.saved, ...flags.shortlisted].map((j) => [j.id, j])).values()];
   const job = jobs.find((j) => j.id === jobId);
-  const split = job ? splitSkills(job.requiredSkills, mockSkills) : null;
+  const skills: Skill[] = (q.data?.skills ?? []).map((s) => ({ name: String(s.name), level: 'intermediate', v: s.verification }));
+  const split = job ? splitSkills(job.requiredSkills, skills) : null;
 
   return (
     <PageShell title="Tailor Resume" backHref="/resume">
+      {!getBackend() && <NeedsBackend />}
       <IonCard>
         <IonCardContent>
           {jobs.length === 0 && <p>Save or shortlist a job first, then choose it here.</p>}
@@ -22,8 +27,8 @@ export default function ResumeTailoring() {
             onIonChange={(e) => { setJobId(e.detail.value); setRan(false); }}>
             {jobs.map((j) => <IonSelectOption key={j.id} value={j.id}>{j.title} - {j.company}</IonSelectOption>)}
           </IonSelect>
-          <IonButton expand="block" disabled={!job} onClick={() => setRan(true)}>Preview tailoring</IonButton>
-          <p style={{ opacity: 0.7 }}>Preview only. Real AI generation arrives in Stage 7. Compares the job's tags with your verified skills (still sample data until your resume is imported and confirmed).</p>
+          <IonButton expand="block" disabled={!job || !q.data} onClick={() => setRan(true)}>Preview tailoring</IonButton>
+          <p style={{ opacity: 0.7 }}>Preview only. AI generation arrives in Stage 7. This checks the job's tags against your verified skills.</p>
         </IonCardContent>
       </IonCard>
       {ran && split && (

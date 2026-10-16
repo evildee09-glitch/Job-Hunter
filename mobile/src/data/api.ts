@@ -26,7 +26,7 @@ export function saveBackend(c: BackendConfig) {
 
 async function request<T>(url: string, init: RequestInit, token?: string): Promise<T> {
   const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), 30_000);
+  const timer = setTimeout(() => ctrl.abort(), 60_000);
   try {
     const res = await fetch(url, {
       ...init,
@@ -40,7 +40,7 @@ async function request<T>(url: string, init: RequestInit, token?: string): Promi
     }
     return (await res.json()) as T;
   } catch (e) {
-    if (e instanceof DOMException && e.name === 'AbortError') throw new Error('Request timed out. Is the backend running and reachable?');
+    if (e instanceof DOMException && e.name === 'AbortError') throw new Error('Timed out after 60 s. A free Render service can take about a minute to wake up; try again.');
     throw e;
   } finally {
     clearTimeout(timer);
@@ -63,4 +63,11 @@ export async function testBackend(url: string, token: string): Promise<string> {
   await request<{ status: string }>(`${base}/health`, {});
   await request<ProfileFull>(`${base}/profile`, {}, token.trim());
   return 'Connected. Token accepted.';
+}
+
+export interface InterviewRec { id: number; application_id: number; at: string; kind: string; notes: string }
+export interface ApplicationRec {
+  id: number; source: string; job_ref: string; title: string; company: string; url: string; location: string;
+  status: string; match_score: number | null; notes: string; applied_on: string; follow_up_on: string;
+  created_at: string; interviews: InterviewRec[];
 }

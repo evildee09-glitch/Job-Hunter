@@ -24,7 +24,7 @@ export function clip(s: string): string {
 /** Heuristic: does a free-text location restriction plausibly include the Philippines? */
 export function likelyOpenToPH(location: string): boolean {
   const l = location.trim().toLowerCase();
-  return l === '' || l === 'remote' || /worldwide|anywhere|global|philippines|asia|apac|southeast/.test(l);
+  return l === '' || l === 'remote' || /worldwide|anywhere|global|world|philippines|asia|apac|southeast/.test(l);
 }
 
 const str = (v: unknown) => (typeof v === 'string' ? v : '');

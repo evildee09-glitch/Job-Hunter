@@ -8,13 +8,15 @@ from typing import Literal
 
 from fastapi import Depends, FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
-from sqlalchemy import inspect, select
+from pydantic import BaseModel, Field
+from sqlalchemy import and_, func, inspect, or_, select
 from sqlalchemy.orm import Session
 
 from . import config
-from .db import get_db
-from .models import Certification, Document, Education, Employment, Profile, Project, Skill
+from .db import engine, get_db
+from .models import (
+    Application, Certification, Document, Education, Employment, Interview, Profile, Project, Skill,
+)
 from .resume_parser import extract_text, parse_resume
 from .security import require_token
 
@@ -83,7 +85,7 @@ def _apply(obj, allowed: tuple[str, ...], payload: FieldsPayload) -> None:
 
 @app.get("/health")
 def health() -> dict:
-    return {"status": "ok", "auth_configured": bool(config.API_TOKEN)}
+    return {"status": "ok", "auth_configured": bool(config.API_TOKEN), "database": engine.dialect.name}
 
 
 @app.get("/profile", dependencies=[Depends(require_token)])
@@ -194,3 +196,146 @@ def import_resume(file: UploadFile = File(...), db: Session = Depends(get_db)) -
     db.commit()
     return {"document_id": doc.id, "counts": counts, "sections_found": parsed.sections_found,
             "note": "All imported items are unverified. Review and confirm them."}
+
+
+# ---------------------------------------------------------------- applications
+
+AppStatus = Literal[
+    "discovered", "analyzed", "shortlisted", "documents_prepared", "ready_for_review",
+    "submitted", "interview", "offer", "rejected", "withdrawn",
+]
+
+
+class ApplicationIn(BaseModel):
+    source: str = Field(max_length=24)
+    job_ref: str = Field(max_length=120)
+    title: str = Field(min_length=1, max_length=300)
+    company: str = Field(default="", max_length=200)
+    url: str = Field(max_length=500)
+    location: str = Field(default="", max_length=200)
+    match_score: int | None = Field(default=None, ge=1, le=10)
+    status: AppStatus = "shortlisted"
+    notes: str = Field(default="", max_length=5000)
+    force: bool = False
+
+
+class ApplicationPatch(BaseModel):
+    status: AppStatus | None = None
+    notes: str | None = Field(default=None, max_length=5000)
+    applied_on: str | None = Field(default=None, pattern=r"^(\d{4}-\d{2}-\d{2})?$")
+    follow_up_on: str | None = Field(default=None, pattern=r"^(\d{4}-\d{2}-\d{2})?$")
+
+
+class InterviewIn(BaseModel):
+    at: str = Field(min_length=1, max_length=32)
+    kind: str = Field(default="", max_length=80)
+    notes: str = Field(default="", max_length=2000)
+
+
+def _app_dict(a: Application) -> dict:
+    out = _dict(a)
+    out["interviews"] = [_dict(i) for i in a.interviews]
+    return out
+
+
+def _get_app(db: Session, app_id: int) -> Application:
+    a = db.get(Application, app_id)
+    if a is None:
+        raise HTTPException(404, "Application not found")
+    return a
+
+
+@app.get("/applications", dependencies=[Depends(require_token)])
+def list_applications(db: Session = Depends(get_db)) -> list[dict]:
+    return [_app_dict(a) for a in db.scalars(select(Application).order_by(Application.id.desc())).all()]
+
+
+@app.post("/applications", dependencies=[Depends(require_token)])
+def create_application(payload: ApplicationIn, db: Session = Depends(get_db)) -> dict:
+    if not payload.url.startswith("https://"):
+        raise HTTPException(422, "URL must start with https://")
+    p = _profile(db)
+    dup = db.scalars(
+        select(Application).where(
+            Application.profile_id == p.id,
+            or_(
+                Application.url == payload.url,
+                and_(
+                    func.lower(Application.company) == payload.company.lower(),
+                    func.lower(Application.title) == payload.title.lower(),
+                ),
+            ),
+        )
+    ).first()
+    if dup is not None and dup.url == payload.url:
+        raise HTTPException(409, "This exact listing is already tracked")
+    if dup is not None and not payload.force:
+        raise HTTPException(409, f"Already tracked: {dup.title} at {dup.company}")
+    a = Application(profile_id=p.id, **payload.model_dump(exclude={"force"}))
+    db.add(a)
+    db.commit()
+    db.refresh(a)
+    return _app_dict(a)
+
+
+@app.patch("/applications/{app_id}", dependencies=[Depends(require_token)])
+def patch_application(app_id: int, payload: ApplicationPatch, db: Session = Depends(get_db)) -> dict:
+    a = _get_app(db, app_id)
+    for k, v in payload.model_dump(exclude_none=True).items():
+        setattr(a, k, v)
+    db.commit()
+    return _app_dict(a)
+
+
+@app.delete("/applications/{app_id}", dependencies=[Depends(require_token)])
+def delete_application(app_id: int, db: Session = Depends(get_db)) -> dict:
+    db.delete(_get_app(db, app_id))
+    db.commit()
+    return {"deleted": app_id}
+
+
+@app.post("/applications/{app_id}/interviews", dependencies=[Depends(require_token)])
+def add_interview(app_id: int, payload: InterviewIn, db: Session = Depends(get_db)) -> dict:
+    a = _get_app(db, app_id)
+    db.add(Interview(application_id=a.id, **payload.model_dump()))
+    db.commit()
+    db.refresh(a)
+    return _app_dict(a)
+
+
+@app.delete("/interviews/{interview_id}", dependencies=[Depends(require_token)])
+def delete_interview(interview_id: int, db: Session = Depends(get_db)) -> dict:
+    i = db.get(Interview, interview_id)
+    if i is None:
+        raise HTTPException(404, "Interview not found")
+    db.delete(i)
+    db.commit()
+    return {"deleted": interview_id}
+
+
+# ---------------------------------------------------------------- data export / deletion
+
+
+@app.get("/export", dependencies=[Depends(require_token)])
+def export_data(db: Session = Depends(get_db)) -> dict:
+    return {
+        "exported_at": datetime.utcnow().isoformat() + "Z",
+        "profile": _full(_profile(db)),
+        "applications": [_app_dict(a) for a in db.scalars(select(Application)).all()],
+    }
+
+
+@app.delete("/data", dependencies=[Depends(require_token)])
+def delete_all_data(confirm: str = "", db: Session = Depends(get_db)) -> dict:
+    if confirm != "DELETE":
+        raise HTTPException(400, "Pass confirm=DELETE to delete all data")
+    files = [d.stored_name for p in db.scalars(select(Profile)).all() for d in p.documents]
+    apps = db.scalars(select(Application)).all()
+    for a in apps:
+        db.delete(a)
+    for p in db.scalars(select(Profile)).all():
+        db.delete(p)
+    db.commit()
+    for f in files:
+        (config.UPLOAD_DIR / f).unlink(missing_ok=True)
+    return {"deleted_applications": len(apps), "deleted_files": len(files)}
